@@ -2,7 +2,7 @@
  *
  * 判定: GameMode (0xA8B238) 且 ScenarioStarted (0xA8ED5C) —— 大厅/载入屏不算,
  *       那里发出去的消息会跟着开局重置一起没掉。
- *         LAN(3) / Internet(4) = 联机, 恒每 30 秒一条, 不受配置影响。
+ *         LAN(3) / Internet(4) = 联机, 默认每 30 秒一条, 可由 [PvpNotice] Enable 关闭。
  *         Skirmish(5)          = 单人, 按 [PvpNotice] Single:
  *                                0=不发 (默认) / 1=也发 (自测) / 2=只发一次。
  *       两种都还要求房表里除中立房外没有非人类房, 即没有 AI。
@@ -55,6 +55,7 @@
 /* ---------------- 状态 ---------------- */
 
 static int      g_Init = 0;
+static int      g_Enable = 1;       /* [PvpNotice] Enable: 0=关闭, 1=启用 */
 static int      g_Single = 0;      /* [PvpNotice] Single: 0/1/2, 只管单人 */
 static int      g_SingleDone = 0;  /* Single=2 本局已发过 */
 static unsigned g_NextTick = 0;    /* 下次可发时刻, 0 = 立即 */
@@ -97,10 +98,13 @@ void PvpNotice_EnsureInit(void)
         PN_MakeText(L"Mental Omega Experience Enhancements ",
                     shroud ? L" (non-vanilla, translucent shroud)" : L" (non-vanilla)",
                     L" may affect match balance.");
+    g_Enable = GetPrivateProfileIntA("PvpNotice", "Enable", 1, g_IniPath) ? 1 : 0;
     g_Single = GetPrivateProfileIntA("PvpNotice", "Single", 0, g_IniPath);
     if (g_Single < 0) g_Single = 0;
     if (g_Single > 2) g_Single = 2;
-    p = AppendCStr(buf, 0, "pvponotice: 30s, single=", sizeof(buf));
+    p = AppendCStr(buf, 0, "pvponotice: enable=", sizeof(buf));
+    p = AppendInt(buf, p, sizeof(buf), g_Enable);
+    p = AppendCStr(buf, p, ", 30s, single=", sizeof(buf));
     p = AppendInt(buf, p, sizeof(buf), g_Single);
     p = AppendCStr(buf, p, ", shroud=", sizeof(buf));
     p = AppendInt(buf, p, sizeof(buf), shroud);
@@ -195,6 +199,14 @@ void PvpNotice_Poll(void)
     int gm = *(const int*)(size_t)ADDR_SESSION;
     int mp = (gm == GM_LAN || gm == GM_INTERNET);
     unsigned now;
+
+    if (!g_Enable)
+    {
+        g_InMatch = 0;
+        g_NextTick = 0;
+        g_SingleDone = 0;
+        return;
+    }
 
     /* 战役/菜单, 或还没真正开局 (大厅、载入屏) —— 一条都不发。
      * 大厅里发的会随开局重置消息列表一起没掉, 所以首条要等 ScenarioStarted。 */

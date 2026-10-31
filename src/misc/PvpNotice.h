@@ -3,7 +3,8 @@
 #pragma once
 
 /* 每主循环轮询 (挂 PowerDrawBoth): 判定游戏模式与房表, 每 30 秒发一条聊天广播。
- * 联机恒发; 单人按 [PvpNotice] Single (0=不发 / 1=也发 / 2=只发一次)。
+ * [PvpNotice] Enable=0 时完全关闭; 启用时联机每 30 秒发一条。
+ * 单人按 [PvpNotice] Single (0=不发 / 1=也发 / 2=只发一次)。
  * 大厅与载入屏不发 (等 ScenarioStarted), 开局后再静默 3 秒才发首条。
  * 纯只读查询 + 引擎自带聊天报文, 不发模拟事件、不写模拟内存。 */
 void PvpNotice_Poll(void);
