@@ -70,6 +70,7 @@ typedef int __attribute__((thiscall)) (*Fn_WhatAmI)(void* self);
 
 static int g_TTInit = 0;
 static int g_TTEnable = 1;
+static int g_TTPhobos = 0;
 /* 图标走 Icon.h 的 PUA 码 (内嵌 PCX, VecText 拦截绘制)。
  * 固定图标 (icons/icon_*.pcx, 8bpp 灰度索引):
  *   ICON_PWR_UP=供电 / ICON_PWR_DOWN=耗电 / ICON_TIME=耗时表盘。 */
@@ -105,8 +106,13 @@ static void ToolTip_EnsureInit(void)
     g_TTInit = 1;
     BuildPaths();
     GtEnsureLog();
-    g_TTEnable = GetPrivateProfileIntA(TT_SECTION, "ToolTips", 1, g_IniPath) ? 1 : 0;
-    LogLine(g_TTEnable ? "tooltip: power+time ON" : "tooltip: power+time OFF");
+    g_TTPhobos = GetModuleHandleA("Phobos.dll") != NULL;
+    g_TTEnable = !g_TTPhobos &&
+                 (GetPrivateProfileIntA(TT_SECTION, "ToolTips", 1, g_IniPath) ? 1 : 0);
+    if (g_TTPhobos)
+        LogLine("tooltip: custom extension OFF (Phobos detected)");
+    else
+        LogLine(g_TTEnable ? "tooltip: power+time ON" : "tooltip: power+time OFF");
 }
 
 /* 假对象求 TimeToBuild (Phobos GetBuildTime 同式): 静态零缓冲 + 虚表 +
@@ -189,7 +195,7 @@ extern "C" __declspec(dllexport) DWORD __cdecl ToolTip_Extend(void* regs)
     const wchar_t* orig;
 
     ToolTip_EnsureInit();
-    if (!g_TTEnable) return 0;
+    if (!g_TTEnable || g_TTPhobos) return 0;
 
     pType = (void*)TT_Reg(regs, REG_OFF_ESI);
     if (!pType || !IsPlausiblePtr(pType)) return 0;
@@ -303,6 +309,8 @@ extern "C" __declspec(dllexport) DWORD __cdecl ToolTip_Clamp(void* regs)
     int* pr;
     int* pt;
     int minX, maxX, dx, w;
+    ToolTip_EnsureInit();
+    if (!g_TTEnable || g_TTPhobos) return 0;
     esp = TT_Reg(regs, REG_OFF_ESP);
     surf = (void*)TT_Reg(regs, REG_OFF_ESI);
     if (!esp || !surf) return 0;
@@ -364,6 +372,8 @@ extern "C" __declspec(dllexport) DWORD __cdecl ToolTip_AdvFix(void* regs)
 {
     unsigned esp;
     unsigned wc;
+    ToolTip_EnsureInit();
+    if (!g_TTEnable || g_TTPhobos) return 0;
     esp = TT_Reg(regs, REG_OFF_ESP);
     if (!esp || !IsPlausiblePtr((const void*)(esp + 4u))) return 0;
     wc = *(unsigned short*)(esp + 4u);

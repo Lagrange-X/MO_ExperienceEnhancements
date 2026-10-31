@@ -166,14 +166,101 @@ void Lang_SetMode(int mode)
     Lang_SelectFile();
 }
 
+static int Lang_SameA(const char* a, const char* b)
+{
+    while (*a && *b && *a == *b) { a++; b++; }
+    return *a == 0 && *b == 0;
+}
+
+/* Read the UTF-8 bytes directly. GetPrivateProfileStringA converts through
+ * the system ANSI code page before returning, which corrupts UTF-8 on Chinese
+ * Windows and makes the subsequent UTF-8 decoder see invalid sequences. */
 static void Lang_Read(const char* path, const char* section, const char* key,
                       char* buf, int cap)
 {
+    char data[16384];
+    HANDLE h;
+    DWORD size, got;
+    char current[128];
+    unsigned pos, line, end, i, start;
+    int inSection;
+
     if (!buf || cap <= 0) return;
     buf[0] = 0;
     if (!path || !path[0] || !section || !key) return;
-    GetPrivateProfileStringA(section, key, "", buf, cap, path);
-    Lang_TrimA(buf);
+
+    h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return;
+    size = GetFileSize(h, NULL);
+    if (size == INVALID_FILE_SIZE || size >= sizeof(data) ||
+        !ReadFile(h, data, size, &got, NULL) || got != size)
+    {
+        CloseHandle(h);
+        return;
+    }
+    CloseHandle(h);
+    data[size] = 0;
+
+    inSection = 0;
+    pos = 0;
+    while (pos < size)
+    {
+        line = pos;
+        while (pos < size && data[pos] != '\n') pos++;
+        end = pos;
+        if (end > line && data[end - 1] == '\r') end--;
+
+        start = line;
+        while (start < end && (data[start] == ' ' || data[start] == '\t')) start++;
+        if (start < end && data[start] == '[')
+        {
+            i = start + 1;
+            while (i < end && data[i] != ']') i++;
+            if (i < end)
+            {
+                unsigned n = i - start - 1;
+                if (n >= sizeof(current)) n = sizeof(current) - 1;
+                for (unsigned j = 0; j < n; j++) current[j] = data[start + 1 + j];
+                current[n] = 0;
+                Lang_TrimA(current);
+                inSection = Lang_SameA(current, section);
+            }
+            else inSection = 0;
+        }
+        else if (inSection && start < end && data[start] != ';' &&
+                 data[start] != '#')
+        {
+            i = start;
+            while (i < end && data[i] != '=') i++;
+            if (i < end)
+            {
+                unsigned n = i - start;
+                while (n > 0 && (data[start + n - 1] == ' ' ||
+                                 data[start + n - 1] == '\t')) n--;
+                if (n < sizeof(current))
+                {
+                    for (unsigned j = 0; j < n; j++) current[j] = data[start + j];
+                    current[n] = 0;
+                    if (Lang_SameA(current, key))
+                    {
+                        unsigned value = i + 1;
+                        while (value < end && (data[value] == ' ' ||
+                                               data[value] == '\t')) value++;
+                        unsigned out = 0;
+                        while (value < end && data[value] != ';' &&
+                               out < (unsigned)cap - 1)
+                            buf[out++] = data[value++];
+                        while (out > 0 && (buf[out - 1] == ' ' ||
+                                           buf[out - 1] == '\t')) out--;
+                        buf[out] = 0;
+                        return;
+                    }
+                }
+            }
+        }
+        if (pos < size) pos++;
+    }
 }
 
 void Lang_GetA(const char* section, const char* key, const char* def,

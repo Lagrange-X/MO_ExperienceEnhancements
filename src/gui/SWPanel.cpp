@@ -15,6 +15,8 @@
 #include "VecText.h"
 #include "SWPanel.h"
 
+#define SW_BOTTOM_BAR_H 32
+
 typedef struct {
     int Enable;
     int FontPx;      /* 0 = 跟 BitFont 行高 */
@@ -42,6 +44,13 @@ static int s_LastAnchor = -1, s_LastRightEdge = -1, s_LastMapRight = -1;
 static int s_LastRows = -1;   /* 行数也进触发条件: 条目变少要能看出来 */
 static int s_AnchorLost = 0;
 
+static int SWBottomGap(int configured)
+{
+    int gap = configured;
+    if (gap < SW_BOTTOM_BAR_H + 2) gap = SW_BOTTOM_BAR_H + 2;
+    return gap;
+}
+
 void SWPanel_EnsureInit(void)
 {
     char buf[256];
@@ -57,7 +66,11 @@ void SWPanel_EnsureInit(void)
                   g_SW.FontFace, sizeof(g_SW.FontFace));
     g_SW.Opacity = GetPrivateProfileIntA(SWPANEL_SECTION, "Opacity", 60, g_IniPath);
     g_SW.RightMargin = GetPrivateProfileIntA(SWPANEL_SECTION, "RightMargin", 8, g_IniPath);
-    g_SW.BottomMargin = GetPrivateProfileIntA(SWPANEL_SECTION, "BottomMargin", 8, g_IniPath);
+    g_SW.BottomMargin = GetPrivateProfileIntA(SWPANEL_SECTION, "BottomMargin",
+                                               0x7FFFFFFF, g_IniPath);
+    if (g_SW.BottomMargin == 0x7FFFFFFF)
+        g_SW.BottomMargin = GetPrivateProfileIntA("SWSidebar", "BottomMargin",
+                                                   8, g_IniPath);
     g_SW.PadX = GetPrivateProfileIntA(SWPANEL_SECTION, "PadX", 6, g_IniPath);
     g_SW.PadY = GetPrivateProfileIntA(SWPANEL_SECTION, "PadY", 2, g_IniPath);
     g_SW.Gap = GetPrivateProfileIntA(SWPANEL_SECTION, "Gap", 12, g_IniPath);
@@ -109,6 +122,8 @@ void SWPanel_EnsureInit(void)
     p += UtoA((unsigned)g_SW.Classic, buf + p);
     p = AppendCStr(buf, p, " gap=", sizeof(buf));
     p += UtoA((unsigned)g_SW.Gap, buf + p);
+    p = AppendCStr(buf, p, " bottom=", sizeof(buf));
+    p += UtoA((unsigned)g_SW.BottomMargin, buf + p);
     LogLine(buf);
 }
 
@@ -556,7 +571,11 @@ int SWPanel_Draw(void* surf, int bitLineH, int surfW, int surfH, int surfPitch)
     /* 经典行距 (字高+上下 PadY): 条无缝衔接, 底部锚定守界 (引擎 y 只定顺序) */
     step = adv + g_SW.PadY * 2;
     if (step < 1) step = 1;
-    top = surfH - g_SW.BottomMargin - n * step;
+    {
+        int visualGap = g_SW.Shadow
+                      ? g_SW.ShadowDY + g_SW.ShadowSize : 0;
+        top = surfH - SWBottomGap(g_SW.BottomMargin) - visualGap - n * step;
+    }
     if (top < 0) top = 0;
     alpha = (unsigned)(g_SW.Opacity > 0 ? g_SW.Opacity * 255 / 100 : 0);
 
@@ -583,7 +602,11 @@ int SWPanel_Draw(void* surf, int bitLineH, int surfW, int surfH, int surfPitch)
         panelW = g_SW.PadX * 2 + maxNW + (hasTimer ? g_SW.Gap + maxTW : 0);
         panelH = g_SW.PadY * 2 + n * adv;
         px = anchor - g_SW.RightMargin - panelW;
-        py = surfH - g_SW.BottomMargin - panelH;
+        {
+            int visualGap = g_SW.Shadow
+                          ? g_SW.ShadowDY + g_SW.ShadowSize : 0;
+            py = surfH - SWBottomGap(g_SW.BottomMargin) - visualGap - panelH;
+        }
         if (px < 0) px = 0;
         if (py < 0) py = 0;
         lx = px; ly = py; lw = panelW; lh = panelH;

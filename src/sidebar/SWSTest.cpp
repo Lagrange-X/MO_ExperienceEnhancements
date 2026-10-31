@@ -15,7 +15,7 @@
 #include "EngineAddr.h"
 #include "SWSBar.h"
 #include "SWSTest.h"
-#include "GUI/GdiText.h"
+#include "GdiText.h"
 
 #define T_N 10
 /* 与 SWS_TestAction 的动作号同序; 0/1 由本文件直接调 SWS_SetEnabled。 */

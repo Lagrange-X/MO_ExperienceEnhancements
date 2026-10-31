@@ -57,6 +57,7 @@
 #define RADAR_SEC      "MsgRadar"
 #define RADAR_NAME_N   17
 #define RADAR_NAME_CAP 40
+#define MSG_BOTTOM_BAR_H 32
 
 /* ---------------- 配置 ---------------- */
 
@@ -91,6 +92,7 @@ typedef struct {
     int HintShow;      /* 1 = 左下显示操作与战斗提示 (sp=1) */
     int HintPosX;
     int HintBottom;    /* 距底边像素 */
+    int RadarBottom;   /* 含雷达事件时提示框距底边像素, -1=沿用 HintBottom */
     int HintFontHeight;/* 0 = 跟 BitFont 字高 */
     int HintBold;
     char HintFontFace[64]; /* 同上 (提示框用), 缺省 msyh.ttc */
@@ -116,6 +118,13 @@ static int s_HaveSavedCfg = 0;
 
 static wchar_t g_CampFace[FONT_FACE_MAX];
 static wchar_t g_HintFace[FONT_FACE_MAX];
+
+static int MsgHintBottom(int configured)
+{
+    int bottom = configured;
+    if (bottom < MSG_BOTTOM_BAR_H + 2) bottom = MSG_BOTTOM_BAR_H + 2;
+    return bottom;
+}
 
 /* 解析 MaxWidth: 整数=像素; 含小数点则按屏宽百分比走,
  * 返回像素值, 百分比时返回 0 并写 *pmille (千分比 1~1000)。
@@ -194,6 +203,14 @@ static ChatMsg* MsgAt(MsgRing* r, int i)
     int idx = r->head - r->count + i;
     while (idx < 0) idx += r->cap;
     return &r->buf[idx % r->cap];
+}
+
+static int RingHasKind(MsgRing* r, int kind)
+{
+    int i;
+    for (i = 0; i < r->count; i++)
+        if (MsgAt(r, i)->kind == kind) return 1;
+    return 0;
 }
 
 static void CopyW(wchar_t* dst, const wchar_t* src, int cap)
@@ -488,11 +505,12 @@ static void MsgText_LoadConfig(void)
     g_Cfg.HintShow    = GetPrivateProfileIntA(MSG_SECTION, "HintShow", 1, g_IniPath);
     g_Cfg.HintPosX    = GetPrivateProfileIntA(MSG_SECTION, "HintPosX", 8, g_IniPath);
     g_Cfg.HintBottom  = GetPrivateProfileIntA(MSG_SECTION, "HintBottom", 8, g_IniPath);
+    g_Cfg.RadarBottom = GetPrivateProfileIntA(MSG_SECTION, "RadarBottom", -1, g_IniPath);
     g_Cfg.HintFontHeight = GetPrivateProfileIntA(MSG_SECTION, "HintFontHeight", 14, g_IniPath);
     g_Cfg.HintBold    = GetPrivateProfileIntA(MSG_SECTION, "HintBold", 0, g_IniPath);
     OU_ReadString(MSG_SECTION, "HintFontFace", "msyh.ttc",
                   g_Cfg.HintFontFace, sizeof(g_Cfg.HintFontFace));
-    g_Cfg.HintColorFollow = GetPrivateProfileIntA(MSG_SECTION, "HintColorFollow", 0, g_IniPath);
+    g_Cfg.HintColorFollow = GetPrivateProfileIntA(MSG_SECTION, "HintColorFollow", 1, g_IniPath);
     g_Cfg.HintMaxLines= GetPrivateProfileIntA(MSG_SECTION, "HintMaxLines", 8, g_IniPath);
     g_Cfg.HintOpMaxLines = GetPrivateProfileIntA(MSG_SECTION, "HintOpMaxLines", 4, g_IniPath);
     g_Cfg.HintRadarShow = GetPrivateProfileIntA(MSG_SECTION, "HintRadarShow", 1, g_IniPath);
@@ -542,6 +560,8 @@ static void MsgText_LoadConfig(void)
     g_Cfg.HintShow = g_Cfg.HintShow ? 1 : 0;
     if (g_Cfg.HintPosX < 0) g_Cfg.HintPosX = 0;
     if (g_Cfg.HintBottom < 0) g_Cfg.HintBottom = 0;
+    if (g_Cfg.RadarBottom < -1) g_Cfg.RadarBottom = -1;
+    if (g_Cfg.RadarBottom > 2000) g_Cfg.RadarBottom = 2000;
     if (g_Cfg.HintFontHeight < 0) g_Cfg.HintFontHeight = 0;
     if (g_Cfg.HintFontHeight > 64) g_Cfg.HintFontHeight = 64;
     g_Cfg.HintBold = g_Cfg.HintBold ? 1 : 0;
@@ -1492,7 +1512,12 @@ static void HintTriggerGeom(int bitLineH, int screenW, int surfH,
     out->Width = maxW + 6;
     /* 与 DrawBox 的末行命中带同一口径 (ly-2, 高 adv+4):
      * 末行 ly = surfH - bottomMargin - adv - 2 */
-    out->Y = surfH - g_Cfg.HintBottom - adv - 4;
+    {
+        int bottom = (g_Cfg.RadarBottom >= 0 &&
+                      RingHasKind(&g_HintRing, KIND_RADAR))
+                   ? g_Cfg.RadarBottom : g_Cfg.HintBottom;
+        out->Y = surfH - MsgHintBottom(bottom) - adv - 4;
+    }
     out->Height = adv + 4;
 }
 
@@ -1776,7 +1801,10 @@ int MsgText_DrawFrame(void* surf, int bitLineH, int screenW,
      * 里的也算进来 —— 窗口还是 HintMaxLines 行, 多的用滚轮翻。 */
     hint.wantSp = 1;
     hint.x = g_Cfg.HintPosX; hint.yBase = 0; hint.topGap = 0;
-    hint.autoBottom = 1; hint.bottomMargin = g_Cfg.HintBottom;
+    hint.autoBottom = 1;
+    hint.bottomMargin = MsgHintBottom(
+        (g_Cfg.RadarBottom >= 0 && RingHasKind(&g_HintRing, KIND_RADAR))
+        ? g_Cfg.RadarBottom : g_Cfg.HintBottom);
     hint.centered = 0;
     hint.maxW = g_Cfg.HintMaxWidth; hint.maxWPm = 0;
     hint.limit = g_Cfg.HintMaxLines;

@@ -169,7 +169,7 @@ void SB_EnsureInit(void)
     s_Init = 1;
     GtEnsureLog();
     if (!g_Log) return;
-    s_Enable = GetPrivateProfileIntA(SB_SECTION, "ScaleEnable", 0, g_IniPath) ? 1 : 0;
+    s_Enable = GetPrivateProfileIntA(SB_SECTION, "ScaleEnable", 1, g_IniPath) ? 1 : 0;
     s_X = GetPrivateProfileIntA(SB_SECTION, "X", 32, g_IniPath);
     if (s_X < 0 || s_X > 4096) s_X = 32;
     s_Y = GetPrivateProfileIntA(SB_SECTION, "Y", 4, g_IniPath);

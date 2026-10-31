@@ -350,6 +350,7 @@ static int s_RightMargin = 2;
  * 范围取 0~1 而不是 0~100, 是为了和 ini 里其它归一到 0~1 的观感一致。 */
 static int s_TopIsPct = 0;
 static int s_TopMargin = 50000;  /* 比例时 x100000 (0.5 -> 50000); 像素时是 px */
+static int s_BottomMargin = -1;  /* >=0 时改用距屏幕底边的像素距离 */
 static int s_FontPx = 12;        /* 只管充能百分比; 悬停名走 [VecText] */
 static OU_Hotkey s_ToggleHk;
 static int s_Visible = 1;
@@ -710,6 +711,7 @@ static unsigned SwsKeyLen(const char* k)
  * 那份保持一致。 */
 static const char* const kGlobalKey[] = {
     "Enable", "ToggleKey", "Gap", "ColGap", "RightMargin", "TopMargin",
+    "BottomMargin",
     "Alpha", "FontPx", "MaxRows", "ScrollStep", "Side", "FillMode",
     "DedupDefensePage",
 };
@@ -794,6 +796,9 @@ static void SwsEnsureInit(void)
             s_TopMargin = (int)v;
         }
     }
+    s_BottomMargin = GetPrivateProfileIntA(SWS_SECTION, "BottomMargin", -1, g_IniPath);
+    if (s_BottomMargin < -1) s_BottomMargin = -1;
+    if (s_BottomMargin > 2000) s_BottomMargin = 2000;
     /* 整体透明度: 0=完全透明, 100=不透明。作用于侧栏画出的绝大多数像素
      * (底框/图标/边框/滚动条/箭头/文字)。 */
     s_Alpha = GetPrivateProfileIntA(SWS_SECTION, "Alpha", 100, g_IniPath);
@@ -3613,7 +3618,9 @@ static void SwsRebuild(int w, int h, int mx, int my, int curSel,
     }
     /* 比例 = 屏幕高×比例 − 半个块高 (视觉居中); 像素 = 直接当 Y。
      * 纵向多留 SWS_BTN_H+2 给块顶的按钮。 */
-    if (s_TopIsPct)
+    if (s_BottomMargin >= 0)
+        yStart = h - s_BottomMargin - blockH;
+    else if (s_TopIsPct)
         yStart = (int)(((long)h * (long)s_TopMargin) / 100000L) - blockH / 2;
     else
         yStart = s_TopMargin;
